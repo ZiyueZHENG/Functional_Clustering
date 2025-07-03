@@ -8,10 +8,9 @@ The main motivating application is a novel subcellular proteome dataset from the
 ## Installation
 The R package can be installed using the following commands.
 <pre lang="markdown"> 
-  ```r 
-  install.packages("devtools") 
-  devtools::install_github("ZiyueZHENG/FunctionalClust") 
-  ``` </pre>
+install.packages("devtools") 
+devtools::install_github("ZiyueZHENG/FunctionalClust", subdir = "FunctionalClust") 
+</pre>
 
 ## Vignette (Or maybe an easy example here)
 
