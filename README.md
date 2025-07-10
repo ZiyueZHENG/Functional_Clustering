@@ -7,12 +7,55 @@ The main motivating application is a novel subcellular proteome dataset from the
 
 ## Installation
 The R package can be installed using the following commands.
-<pre lang="markdown"> 
-install.packages("devtools") 
-devtools::install_github("ZiyueZHENG/FunctionalClust", subdir = "FunctionalClust") 
+<pre lang="markdown"> install.packages("devtools") 
+devtools::install_github("ZiyueZHENG/FunctionalClust", subdir = "FunctionalClust")
+library(FunctionalClust)
 </pre>
 
-## Vignette (Or maybe an easy example here)
+## Vignette
+### Step 0 Preparing data
+This method is designed for data collecting from mass spectorometer. 
+The ideal data is a pure data matrix and a label list. The label list has two column the first is index of labeled data and the second is their labels. 
+The optional data is dataframe with the first n columns are data and the last column is label. Unlabel data should marked as NA in the last column. With this dataframe, you can use *prepare_data* to process the data.
+There are several built-in datasets in this package. You can check and refer to their data type.
+<pre lang="markdown"> x <- prepare_data(Loay2024)
+data <- x$data
+label <- x$labels</pre>
+
+### Step 1 Fit the model
+The main function in this package is *functional_cluster* which takes at most 7 parameters. **data** and **num_clust** are required, the others are optional. Here is the full list:
+* data : A n*p numeric matrix. Row represents protein and column represents fraction. 
+* label : A n_c*2 data frame. First column represents the labeled data index, second column represents the label index(numeric factor).  
+* num_clust : Number of clusters.(Should be no less than number of label classes)
+* bandwidth : Smooth parameter. Default 1
+* max_iter : Maximum iteration number. Default 1000
+* min_gap : Stopping gap of likelihood. Default 0.1
+* nrep : Number of repetitions with different initialization. Default 10
+<pre lang="markdown"> res <- functional_cluster(data = data, label = label, num_clust = 10, bandwidth = 1.5, max_iter = 1000, min_gap = 0.1, nrep = 10)
+</pre>
+In a later section we discussed how to use cross-validation to choose the best hyper-parameters **h** and **num_clust**. 
+
+### Step 2 Interpret the results
+The main function *functional_cluster* will return a list with the following structure:
+- result
+  - result$mu : A K*d matrix. Each row represents a group mean. Each column represents a fraction.
+  - result$sigma : A K*d matrix. The (k,j) element represents the standard deviation of k-th group at j-th fraction.
+  - result$rho : A K*1 vector. The porportion of each group.
+  - result$resp : A n*K matrix. The (i,k) element represents the probability of i-th protein belong to k-th group.
+- likeli_trace : The likelihood trace of algorithm. 
+- likelihood : The best likelihood.
+
+**------Below haven't done yet--------**
+
+### Step 3 Visualization 
+There is a visualization function in this package allow you to check the clustering results in a low dimension space. We provide PCA, UMAP and tSNE as the optional dimension reduction methods.
+
+### Optional: Choosing the best hyper-parameters
+Choosing the best smoothern bandwidth:
+The *cv_functional_clust* is a cross-validation procedure for choosing **h**.
+
+Choosing the best number of clusters:
+In the paper we use AIC to choose it which is verified valid through experiments.
 
 
 ## Authors & Contributors
