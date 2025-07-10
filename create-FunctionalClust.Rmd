@@ -1,0 +1,388 @@
+---
+title: "Creating the ``r params$package_name`` R package"
+author: "Your Name"
+date: "The Date"
+knit: litr::render
+output: litr::litr_html_document
+params:
+  package_name: "FunctionalClust"
+  package_parent_dir: "." # <-- relative to this file's location
+---
+
+<!-- This Rmd file contains all the code needed to define an R package.  Press "Knit" in RStudio or more generally run `litr::render("name-of-this-file.Rmd")` to generate the R package.  Remember that when you want to modify anything about the R package, you should modify this document rather than the package that is outputted.
+-->
+
+## Package setup
+
+We start by specifying the information needed in the DESCRIPTION file of the R package.
+
+```{r package-setup, message=FALSE, results='hide'}
+usethis::create_package(
+  path = ".",
+  fields = list(
+    Package = params$package_name,
+    Version = "0.0.0.9000",
+    Title = "A Package That Says Hello",
+    Description = "This package says hello.  But its actual purpose is to show how an R package can be completely coded in a single R markdown file.",
+    `Authors@R` = person(
+      given = "First",
+      family = "Last",
+      email = "you@gmail.com",
+      role = c("aut", "cre")
+      )
+  )
+)
+usethis::use_mit_license(copyright_holder = "F. Last")
+```
+
+## Now to the package itself
+
+### Define a function
+
+Helper function that prepare data and label from a dataframe with label in the last column.
+```{r}
+#' Split a data frame into a data-matrix and indexed label table
+#'
+#' @param df A data.frame with (n + 1) columns:
+#'           the first n are numeric predictors,
+#'           the last column is a (possibly-NA) character/ factor label.
+#' @return   A list with two elements:
+#'           • data   – an n-column numeric matrix  
+#'           • labels – a data.frame with  
+#'               - index  : row numbers of the non-NA labels  
+#'               - label  : integer codes (factor levels) of those labels
+#' @export
+prepare_data <- function(df) {
+  stopifnot(is.data.frame(df), ncol(df) >= 2)
+
+  ## 1) predictors → numeric matrix  (drop = FALSE keeps matrix form for n = 1)
+  X <- as.matrix(df[, -ncol(df), drop = FALSE])
+
+  ## 2) labels  → (index, integer-factor)
+  y        <- df[[ncol(df)]]
+  y[y == "unknown"] <- NA
+  idx      <- which(!is.na(y))           # rows that *have* a label
+  y_factor <- factor(y[idx])             # gives reproducible level ordering
+  y_int    <- as.integer(y_factor)       # integer codes 1, 2, …
+
+  labels <- data.frame(index = idx,
+                       label = y_int)
+
+  ## (optional) keep the mapping so you can recover the original text
+  attr(labels$label, "levels") <- levels(y_factor)
+
+  list(data = X,
+       labels = labels)
+}
+
+```
+
+Helper function of row softmax
+```{r}
+#' Row normalized a matrix with sum up to one
+#' @param log_mat
+row_softmax <- function(log_mat) {
+  row_max <- apply(log_mat, 1, max)
+  exp(log_mat - row_max) / rowSums(exp(log_mat - row_max))
+}
+
+```
+
+
+
+Main function
+```{r}
+#' Main function of semi-supervised functional clustering
+#' 
+#' @param data Data in matrix form(n * p). Can be the data result from prepare_data
+#' @param label Label set. Can be the label result from prepare_data
+#' @param num_clust Number of cluster. If not specified, will equal to number of distinct label
+#' @param bandwidth Smooth bandwidth
+#' @param max_iter Maximum iteration
+#' @param min_gap Minimum difference of likelihood
+#' @param nrep Number of repetitions
+#' @return A list with three elements:
+#'           • data   – an n-column numeric matrix  
+#'           • labels – a data.frame with  
+#'               - index  : row numbers of the non-NA labels  
+#'               - label  : integer codes (factor levels) of those labels  
+#' @export
+functional_cluster <- function(data , label = NULL , num_clust ,
+                               bandwidth = 1, max_iter = 1000 ,
+                               min_gap   = 1 , nrep      = 5) {
+  n  <- nrow(data)
+  p  <- ncol(data)
+  K  <- num_clust
+  data_matrix <- as.matrix(data)
+  
+  ## pre-compute Gaussian kernel over column indices (1:p)
+  t_index <- seq_len(p)
+  kernel_gauss <- exp(-outer(t_index, t_index, "-")^2 / (2 * bandwidth^2)) 
+  
+  ## identity kernel for the variance (0-1 kernel)
+  kernel_id <- diag(p)                          #  p × p
+  
+  likeli_all <- vector("list", nrep)
+  result     <- vector("list", nrep)
+  
+  for (r in seq_len(nrep)) {
+    loglikeli_total <- numeric(max_iter)
+    resp  <- gtools::rdirichlet(n, rep(1, K))     #  n × K
+    rho   <- colSums(resp)/sum(resp)  #  K
+    mu    <- matrix(0,  K, p)                     #  K × p
+    sigma <- matrix(0.1, K, p)                    #  K × p
+    
+    if (!is.null(label)) {
+      for (lab in unique(label$label)) {
+        rows <- label[label$label == lab, ]$index
+        mu[lab, ]    <- colMeans(data_matrix[rows, , drop = FALSE])
+        sigma[lab, ] <- apply(data_matrix[rows, , drop = FALSE], 2, sd)
+      }
+    }
+    # randomise the remaining components (if any)
+    unfilled <- setdiff(seq_len(K), unique(label$label))
+    for (i in unfilled) {
+      rand <- sample(setdiff(1:n,label$index),10)
+      mu[i, ]    <- colMeans(data_matrix[rand, , drop = FALSE])
+      sigma[i, ] <- apply(data_matrix[rand, , drop = FALSE], 2, sd)
+    }
+
+    for (iter in seq_len(max_iter)) {
+      log_resp <- matrix(0, n, K) # n × K
+      
+      #### E step ####
+      for (k in seq_len(K)) {
+        # n × p matrix of log-densities for component k
+        log_dens_k <- dnorm(data_matrix,
+                            mean = matrix(mu[k, ], nrow = n, ncol = p, byrow = TRUE),
+                            sd   = matrix(sigma[k, ], nrow = n, ncol = p, byrow = TRUE),
+                            log  = TRUE)
+        log_resp[ , k] <- log(rho[k]) + rowSums(log_dens_k)
+      }
+      resp <- row_softmax(log_resp) # n × K
+      
+      if (!is.null(label)) {
+        anchored <- label$index
+        classes  <- label$label
+        resp[cbind(anchored, matrix(rep(seq_len(K), each = length(anchored)), ncol = K))] <- 0
+        resp[cbind(anchored, classes)] <- 1
+      }
+      
+      
+      #### M step ####
+      rho <- pmax(colMeans(resp), 1e-10) # K, pmax avoid log(0)
+      
+      for (k in seq_len(K)) {
+        w_k           <- resp[ , k]                # n
+        w_sum         <- sum(w_k) + 1e-8  # 1 × p
+        numer_mu      <- (t(w_k) %*% data_matrix) %*% kernel_gauss
+        denom         <- w_sum * colSums(kernel_gauss)
+        mu[k, ]       <- numer_mu / pmax(denom, 1e-2)
+      }
+      
+      for (k in seq_len(K)) {
+        centered      <- sweep(data_matrix, 2, mu[k, ], "-")  # n × p
+        numer_sig     <- colSums(resp[ , k] * centered^2)
+        sigma[k, ]    <- sqrt(pmax(numer_sig / pmax(colSums(resp)[k], 1e-2), 1e-5))
+      }
+      
+      loglikeli_total[iter] <- sum(rowSums(resp * (log_resp - log(pmax(resp, 1e-10)))))
+      
+
+      if (iter > 1 && abs(loglikeli_total[iter] - loglikeli_total[iter - 1]) < min_gap){
+        break
+      }
+    }
+    
+    likeli_all[[r]] <- loglikeli_total[seq_len(iter)]
+    result[[r]]     <- list(mu = mu, sigma = sigma, rho = rho, resp = resp)
+  }
+  
+  best_time <- which.max(sapply(likeli_all, max, na.rm = TRUE))
+  likeli_trace = likeli_all[[best_time]]
+  
+  list(likeli_trace = likeli_trace,
+       result       = result[[best_time]],
+       likelihood   = likeli_trace[length(likeli_trace)])
+}
+
+
+```
+
+
+### Create a dataset
+
+In this case, we'll create the data from scratch.  However, we can also download data from a different source here.
+
+```{r}
+#data <- read.csv("../data/combined_proteindata_loadingnorm_imputed_rownorm_20240617.csv" , row.names = 1)
+#label_data <- read.csv("../data/annotationsforlopit_20240813.csv")
+#full_data <- left_join(tibble::rownames_to_column(data),label_data,by=c("rowname"="protein_id"))
+
+yeast2018 <- read.csv("../../data/yeast2018.csv",row.names = 1)
+hirst2018 <- read.csv("../../data/hirst2018.csv",row.names = 1)
+moloneyTbBSF <- read.csv("../../data/moloneyTbBSF.csv",row.names = 1)
+lopitdcU2OS2018 <- read.csv("../../data/lopitdcU2OS2018.csv",row.names = 1)
+E14TG2aR <- read.csv("../../data/E14TG2aR.csv",row.names = 1)
+Loay2024 <- read.csv("../../data/Loay2024.csv",row.names = 1)
+
+```
+
+Now, let's send this off to the package:
+
+```{r}
+usethis::use_data(yeast2018,hirst2018,moloneyTbBSF,lopitdcU2OS2018,E14TG2aR,Loay2024)
+```
+
+And we'll need to document the dataset as well:
+
+
+### Choosing the best hyper-parameters
+```{r}
+#' Cross validation to choose the best h_0
+#' 
+#' @param data Data in matrix form(n * p). Can be the data result from prepare_data
+#' @param label Label set. Can be the label result from prepare_data
+#' @param grid Grid values of bandwidth h
+#' @param num_clust Number of cluster. If not specified, will equal to number of distinct label
+#' @param bandwidth Smooth bandwidth
+#' @param max_iter Maximum iteration
+#' @param min_gap Minimum difference of likelihood
+#' @param nrep Number of repetitions
+#' @return A list with three elements:
+#'           • all_lost – a list contains all the lost at all grid  
+#'           • average_lost – average lost at all grid  
+#'           • best_h – the best bandwidth
+#' @export
+cv_functional_clust <- function(data , label , grid = seq(0.1,2.5,0.1), num_clust , max_iter = 1000, min_gap = 0.1, nrep = 10){
+  cv_all <- vector("list", length(grid))
+  for(i in 1:length(grid)){
+    h <- grid[i]
+    p <- dim(data)[2]
+  
+    cv <- rep(0,p)
+    for(j in 1:p){
+      res <- functional_cluster(data[,-j] ,label = label, num_clust = num_clust , bandwidth = h ,max_iter = max_iter , min_gap = min_gap ,nrep = nrep)
+      
+      # mu_hat_(-j)(j)
+      mu_hat <- res$result$mu %*% gaussian_kernel(seq(1,p,1)[-j],j,h) / sum(gaussian_kernel(seq(1,p,1)[-j],j,h))
+      # gamma*y_j
+      mu_tru <- t(res$result$resp) %*% as.matrix(data[j])/colSums(res$result$resp)
+      # variance
+      sigma_sq_tru <- diag(t(res$result$resp) %*% sweep(matrix(rep(c(data[,j]),8),ncol=8,byrow=FALSE), 2, mu_tru,"-")^2/colSums(res$result$resp))
+      # error
+      cv[j] <- sum((mu_hat-mu_tru)^2/sigma_sq_tru)
+    }
+    cv_all[[i]] <- cv
+  }
+  
+  # a list contain number of grids' vectors. Each vector contain number of channels errors.
+  return(list(all_lost = cv_all , average_lost = lapply(cv_all,mean), best_h = grid[which.min(lapply(cv_all,mean))]))
+}
+```
+
+
+### Visualization
+```{r}
+#' 
+#' @param data
+#' @param res Results generated from functional_cluster
+#' @param method Can only be one the dimension reduction method: "PCA", "UMAP", "tSNE"
+#' 
+#' 
+visualize_res <- function(data,label,method,res){
+  if(method == "PCA"){
+    # PCA
+    pca <- data %>%
+    stat::prcomp()
+    scores = pca$x %>% .[,1:2]
+  }else if(method == "UMAP"){
+    # UMAP
+    d.umap <- umap::umap(data,n_neighbors = 500, min_dist = 0.05, 
+                 verbose = T, n_epochs = 1000, n_components=2)
+    scores <- data.frame(d.umap$layout)
+  }else if(method == "tSNE"){
+    #tSNE
+    scores <- Rtsne::Rtsne(data)
+  }else{
+    print("Method is invalid. Please use one of PCA, UMAP or tSNE")
+  }
+  
+  colnames(scores) <- c("x1","x2")
+  data = data %>% 
+    cbind(scores)
+  
+  
+  
+  
+  
+}
+```
+
+
+
+### Testing
+
+Let's write some tests to make sure the function behaves as desired:
+
+```{r}
+#testthat::test_that("functional clustering work", {
+#  testthat::expect_equal(say_hello("Jacob"), "Hello Jacob!")
+#  testthat::test
+#})
+train_data <- prepare_data(Loay2024)
+res <- functional_cluster(data = train_data$data, label = train_data$labels, num_clust = 8 , bandwidth = 1.5, max_iter = 1000, min_gap = 0.1, nrep = 10)
+
+```
+
+Code chunks that have one or more lines starting with `test_that(` (or `testthat::test_that(`) are added to the package as tests.
+
+
+
+
+
+
+
+
+
+## Documenting the package and building
+
+We finish by running commands that will document, build, and install the package.  It may also be a good idea to check the package from within this file.
+
+```{r}
+litr::document() # <-- use instead of devtools::document()
+devtools::build()
+# devtools::install()
+# devtools::check(document = FALSE)
+```
+
+
+
+
+
+### Add a README
+
+Our README.Rmd lives in the `source-files` directory.  As described [here](https://pkgdown.r-lib.org/reference/build_home.html#package-logo), if we have a hex sticker, we'll add something like the following to the level-one header at the top of the README:
+
+```
+# withpkgdown: An Example Package <img src="man/figures/logo.png" align="right" height="139" />
+```
+
+We add `README.Rmd` to the package and then generate the `README.md` based on it:
+
+```{r}
+#litr::add_readme("../source-files/README.Rmd")
+```
+
+
+
+### Add a vignette
+
+```{r}
+#litr::add_vignettes("../source-files/using-package.Rmd")
+```
+
+
+
+
+
