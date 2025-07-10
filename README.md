@@ -7,7 +7,7 @@ The main motivating application is a novel subcellular proteome dataset from the
 
 ## Installation
 The R package can be installed using the following commands.
-<pre lang="markdown"> install.packages("devtools") 
+<pre lang="markdown">install.packages("devtools") 
 devtools::install_github("ZiyueZHENG/FunctionalClust", subdir = "FunctionalClust")
 library(FunctionalClust)
 </pre>
@@ -18,7 +18,7 @@ This method is designed for data collecting from mass spectorometer.
 The ideal data is a pure data matrix and a label list. The label list has two column the first is index of labeled data and the second is their labels. 
 The optional data is dataframe with the first n columns are data and the last column is label. Unlabel data should marked as NA in the last column. With this dataframe, you can use *prepare_data* to process the data.
 There are several built-in datasets in this package. You can check and refer to their data type.
-<pre lang="markdown"> x <- prepare_data(Loay2024)
+<pre lang="markdown">x <- prepare_data(Loay2024)
 data <- x$data
 label <- x$labels</pre>
 
@@ -31,7 +31,9 @@ The main function in this package is *functional_cluster* which takes at most 7 
 * max_iter : Maximum iteration number. Default 1000
 * min_gap : Stopping gap of likelihood. Default 0.1
 * nrep : Number of repetitions with different initialization. Default 10
-<pre lang="markdown"> res <- functional_cluster(data = data, label = label, num_clust = 10, bandwidth = 1.5, max_iter = 1000, min_gap = 0.1, nrep = 10)
+<pre lang="markdown">res <- functional_cluster(data = data, label = label, 
+  num_clust = 10, bandwidth = 1.5, 
+  max_iter = 1000, min_gap = 0.1, nrep = 10)
 </pre>
 In a later section we discussed how to use cross-validation to choose the best hyper-parameters **h** and **num_clust**. 
 
