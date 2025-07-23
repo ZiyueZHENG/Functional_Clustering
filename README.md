@@ -27,13 +27,13 @@ With this dataframe, you can use *prepare_data* to process the data. And this fu
 <pre lang="markdown">x <- prepare_data(Loay2024)
 data <- x$data
 label <- x$labels</pre>
-There are several built-in datasets in this package. You can check and refer to their data type.
-* yeast2018
-* hirst2018
-* moloneyTbBSF
-* lopitdcU2OS2018
-* E14TG2aR
-* Loay2024
+There are several built-in datasets in this package. You can check and refer to their data type:
+- yeast2018
+- hirst2018
+- moloneyTbBSF
+- lopitdcU2OS2018
+- E14TG2aR
+- Loay2024
 
 
 ### Step 1 Fit the model
@@ -61,17 +61,30 @@ The main function *functional_cluster* will return a list with the following str
 - likeli_trace : The likelihood trace of algorithm. 
 - likelihood : The best likelihood.
 
-**------Below haven't done yet--------**
 
 ### Step 3 Visualization 
-There is a visualization function in this package allow you to check the clustering results in a low dimension space. We provide PCA, UMAP and tSNE as the optional dimension reduction methods.
+*visualize_res* functions in this package allow you to check the clustering results in a 2-dimensional UMAP space.
+* data : The same input as *functional_cluster*
+* label : The same input as *functional_cluster*
+* res : The output result from *functional_cluster*
+## Prediction visualization
+<pre lang="markdown">visualize_res(data = train_data$data, label = train_data$labels , res = res)
+</pre>
+
+## Drawing high probability bands
+*draw_hpb* draws the cluster-conditional high proability bands for all fitted clusters including labeled and unlabeled.
+* res : Result from *functional_cluster*
+* alpha : Alpha level of bans
+* label : label data. Can be NULL(default)
+<pre lang="markdown">draw_hpb(res, alpha = 0.05, label = train_data$labels)
+</pre>
 
 ### Optional: Choosing the best hyper-parameters
 Choosing the best smoothern bandwidth:
 The *cv_functional_clust* is a cross-validation procedure for choosing **h**.
 
 Choosing the best number of clusters:
-In the paper we use AIC to choose it which is verified valid through experiments.
+In the paper we use AIC to choose number of new clusters *K0*. User can choose to use other procedure.
 
 
 ## Authors & Contributors
