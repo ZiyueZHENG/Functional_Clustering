@@ -15,12 +15,26 @@ library(FunctionalClust)
 ## Vignette
 ### Step 0 Preparing data
 This method is designed for data collecting from mass spectorometer. 
-The ideal data is a pure data matrix and a label list. The label list has two column the first is index of labeled data and the second is their labels. 
-The optional data is dataframe with the first n columns are data and the last column is label. Unlabel data should marked as NA in the last column. With this dataframe, you can use *prepare_data* to process the data.
-There are several built-in datasets in this package. You can check and refer to their data type.
+The data should be a *n\*(p+1)* dataframe with *n* proteins and *p* fractions and the last column is label. Unlabel data should marked as NA in the last column. 
+<table>
+  <tr><th>Rowname</th><th>fraction1</th><th>fraction2</th><th>fraction3</th><th>…</th><th>Label</th></tr>
+  <tr><th>protiens1</th><td></td><td></td><td></td><td></td><td>Chloroplast</td></tr>
+  <tr><th>protiens2</th><td></td><td></td><td></td><td></td><td>Ribosome</td></tr>
+  <tr><th>protiens3</th><td></td><td></td><td></td><td></td><td>NA</td></tr>
+  <!-- more rows -->
+</table>
+With this dataframe, you can use *prepare_data* to process the data. And this function will give a list with $data and $labels two attributes which are the direct inputs of main function.
 <pre lang="markdown">x <- prepare_data(Loay2024)
 data <- x$data
 label <- x$labels</pre>
+There are several built-in datasets in this package. You can check and refer to their data type.
+* yeast2018
+* hirst2018
+* moloneyTbBSF
+* lopitdcU2OS2018
+* E14TG2aR
+* Loay2024
+
 
 ### Step 1 Fit the model
 The main function in this package is *functional_cluster* which takes at most 7 parameters. **data** and **num_clust** are required, the others are optional. Here is the full list:
