@@ -55,10 +55,10 @@ Helper function that prepare data and label from a dataframe with label in the l
 prepare_data <- function(df) {
   stopifnot(is.data.frame(df), ncol(df) >= 2)
 
-  ## 1) predictors → numeric matrix  (drop = FALSE keeps matrix form for n = 1)
+  ## predictors → numeric matrix  (drop = FALSE keeps matrix form for n = 1)
   X <- as.matrix(df[, -ncol(df), drop = FALSE])
 
-  ## 2) labels  → (index, integer-factor)
+  ## labels  → (index, integer-factor)
   y        <- df[[ncol(df)]]
   y[y == "unknown"] <- NA
   idx      <- which(!is.na(y))           # rows that *have* a label
@@ -68,7 +68,7 @@ prepare_data <- function(df) {
   labels <- data.frame(index = idx,
                        label = y_int)
 
-  ## (optional) keep the mapping so you can recover the original text
+  ## keep the mapping so you can recover the original text
   attr(labels$label, "levels") <- levels(y_factor)
 
   list(data = X,
@@ -88,6 +88,16 @@ row_softmax <- function(log_mat) {
 
 ```
 
+Gaussian Kernel function
+```{r}
+#' Row normalized a matrix with sum up to one
+#' @param x
+#' @param x_prime
+#' @param sigma
+gaussian_kernel <- function(x, x_prime, sigma = bandwidth) {
+    exp(-((x - x_prime)^2) / (2 * sigma^2))
+}
+```
 
 
 Main function
@@ -164,7 +174,7 @@ functional_cluster <- function(data , label = NULL , num_clust ,
       if (!is.null(label)) {
         anchored <- label$index
         classes  <- label$label
-        resp[cbind(anchored, matrix(rep(seq_len(K), each = length(anchored)), ncol = K))] <- 0
+        resp[anchored, ] <- 0
         resp[cbind(anchored, classes)] <- 1
       }
       
@@ -205,8 +215,21 @@ functional_cluster <- function(data , label = NULL , num_clust ,
        result       = result[[best_time]],
        likelihood   = likeli_trace[length(likeli_trace)])
 }
+```
 
 
+Prediction function
+```{r}
+#' Make prediction on result$resp
+#' @param resp The n*K memebership matrix generate from functional_cluster. It is in res$result$resp
+#' @return A dataframe with the first column is predictive label and the second colunm is proability
+#' @export
+prediction <- function(res){
+  pred <- data.frame(t(apply(res$result$resp, 1, function(p) {
+    k <- sample.int(length(p), size = 1, prob = p)
+    c(predict_label = k, prob = p[k])})))
+  return(pred)
+}
 ```
 
 
@@ -267,7 +290,7 @@ cv_functional_clust <- function(data , label , grid = seq(0.1,2.5,0.1), num_clus
       # mu_hat_(-j)(j)
       mu_hat <- res$result$mu %*% gaussian_kernel(seq(1,p,1)[-j],j,h) / sum(gaussian_kernel(seq(1,p,1)[-j],j,h))
       # gamma*y_j
-      mu_tru <- t(res$result$resp) %*% as.matrix(data[j])/colSums(res$result$resp)
+      mu_tru <- t(res$result$resp) %*% as.matrix(data[,j])/colSums(res$result$resp)
       # variance
       sigma_sq_tru <- diag(t(res$result$resp) %*% sweep(matrix(rep(c(data[,j]),8),ncol=8,byrow=FALSE), 2, mu_tru,"-")^2/colSums(res$result$resp))
       # error
@@ -285,37 +308,88 @@ cv_functional_clust <- function(data , label , grid = seq(0.1,2.5,0.1), num_clus
 ### Visualization
 ```{r}
 #' 
-#' @param data
-#' @param res Results generated from functional_cluster
-#' @param method Can only be one the dimension reduction method: "PCA", "UMAP", "tSNE"
-#' 
-#' 
-visualize_res <- function(data,label,method,res){
-  if(method == "PCA"){
-    # PCA
-    pca <- data %>%
-    stat::prcomp()
-    scores = pca$x %>% .[,1:2]
-  }else if(method == "UMAP"){
-    # UMAP
-    d.umap <- umap::umap(data,n_neighbors = 500, min_dist = 0.05, 
+#' @param data Data
+#' @param label Label
+#' @param prediction Generate from prediction function 
+#' @export
+visualize_res <- function(data,label,res){
+  pred <- prediction(res)
+  
+  d.umap <- umap::umap(data,n_neighbors = 500, min_dist = 0.05, 
                  verbose = T, n_epochs = 1000, n_components=2)
-    scores <- data.frame(d.umap$layout)
-  }else if(method == "tSNE"){
-    #tSNE
-    scores <- Rtsne::Rtsne(data)
-  }else{
-    print("Method is invalid. Please use one of PCA, UMAP or tSNE")
-  }
+  scores <- data.frame(d.umap$layout)
   
   colnames(scores) <- c("x1","x2")
   data = data %>% 
-    cbind(scores)
+    cbind(scores) %>%
+    cbind(pred)
   
+  new_group <- paste0( "New", seq_len( length(unique(pred$predict_label)) - length(unique(label[,2])) ) ) 
+  levels <- c(attr(label$label, "levels"), new_group)
   
+  p1 <- data %>% ggplot() +
+  geom_point(data = data[-label[,1],], # unlabeled
+             aes(x = x1, y = x2), size=1, alpha = 0.1) +
+  geom_point(data = data[label[,1],], # labeled
+             aes(x = x1, y = x2, col = levels[label[,2]] ), size=1.5, alpha = 0.8) +
+  theme_classic() +
+  theme(legend.title = element_blank(),
+        plot.subtitle = element_text(hjust = 0.5),
+        panel.grid.major = element_line(color = "gray88", size = 0.2)
+        ) +
+  labs(subtitle = "Annotated data set")
   
+  p2 <- data %>% 
+  ggplot() +
+  geom_point(aes(x = x1, y = x2, col = levels[predict_label], size = prob) , alpha = .8) +
+  scale_size(range = c(0.01, 1.5)) +
+  labs(color = "", size = "Probability") +
+  theme_classic() +
+  theme(plot.subtitle = element_text(hjust = 0.5),
+        legend.spacing.y = unit(0.05, 'cm'),
+        legend.margin = margin(0, 0, 0, 0),
+        panel.grid.major = element_line(color = "gray88", size = 0.2)
+        ) +
+  labs(subtitle = "Predictive groups")
   
+  p1 / p2
+}
+```
+
+
+Draw high probability bands
+```{r}
+#' 
+#' @param res Output from functional_cluster
+#' @param alpha Alpha level, default is 0.05
+#' @param label Label set, used to assign graph titles. Can be empty(default)
+#' 
+#' @export
+draw_hpb <- function(res, alpha = 0.05,label = NULL){
+  K <- nrow(res$result$mu)
+  p <- ncol(res$result$mu)
   
+  if(!is.null(label)){
+    group <- attr(label$label,"levels")
+    if(K>length(group)){
+      group <- c(group,paste0("New", 1: (K - length(group))))
+    }
+  }else{
+    group <- paste0("Group",1:K)
+  }
+  
+  for(i in 1:K){
+    mean_line <- res$result$mu[i,]
+    var_all <- res$result$sigma[i,]
+    x <- seq(1,p)
+    par(mgp = c(3, 0.5, 0)) 
+    plot(x, t(mean_line), type = "l", ylim = c(0,1),lty = 1, lwd = 2, pch = 20, col = i,
+         xlab = "", ylab = "",main = group[i])
+    upper <- mean_line + qnorm(1 - (1-(1-alpha)^(1/11))/2,0,1) * var_all
+    lower <- mean_line - qnorm(1 - (1-(1-alpha)^(1/11))/2,0,1) * var_all
+    polygon(c(x, rev(x)), c(upper, rev(lower)), col = adjustcolor(i, alpha.f = 0.2), border = NA)
+    
+  }
 }
 ```
 
@@ -332,6 +406,14 @@ Let's write some tests to make sure the function behaves as desired:
 #})
 train_data <- prepare_data(Loay2024)
 res <- functional_cluster(data = train_data$data, label = train_data$labels, num_clust = 8 , bandwidth = 1.5, max_iter = 1000, min_gap = 0.1, nrep = 10)
+
+#cv_functional_clust(data = train_data$data, label = train_data$labels, grid = seq(1,1.5,0.1),num_clust=8,max_iter = 1000, min_gap = 0.1, nrep = 10)
+
+#pre_res <- prediction(res$result$resp)
+
+#visualize_res(data = train_data$data, label = train_data$labels , res = res)
+
+draw_hpb(res, alpha = 0.05)
 
 ```
 
@@ -352,8 +434,8 @@ We finish by running commands that will document, build, and install the package
 ```{r}
 litr::document() # <-- use instead of devtools::document()
 devtools::build()
-# devtools::install()
-# devtools::check(document = FALSE)
+#devtools::install()
+#devtools::check(document = FALSE)
 ```
 
 

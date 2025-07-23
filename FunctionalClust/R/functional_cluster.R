@@ -72,7 +72,7 @@ functional_cluster <- function(data , label = NULL , num_clust ,
       if (!is.null(label)) {
         anchored <- label$index
         classes  <- label$label
-        resp[cbind(anchored, matrix(rep(seq_len(K), each = length(anchored)), ncol = K))] <- 0
+        resp[anchored, ] <- 0
         resp[cbind(anchored, classes)] <- 1
       }
       
@@ -113,5 +113,3 @@ functional_cluster <- function(data , label = NULL , num_clust ,
        result       = result[[best_time]],
        likelihood   = likeli_trace[length(likeli_trace)])
 }
-
-

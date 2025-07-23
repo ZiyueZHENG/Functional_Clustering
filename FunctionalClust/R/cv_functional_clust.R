@@ -28,7 +28,7 @@ cv_functional_clust <- function(data , label , grid = seq(0.1,2.5,0.1), num_clus
       # mu_hat_(-j)(j)
       mu_hat <- res$result$mu %*% gaussian_kernel(seq(1,p,1)[-j],j,h) / sum(gaussian_kernel(seq(1,p,1)[-j],j,h))
       # gamma*y_j
-      mu_tru <- t(res$result$resp) %*% as.matrix(data[j])/colSums(res$result$resp)
+      mu_tru <- t(res$result$resp) %*% as.matrix(data[,j])/colSums(res$result$resp)
       # variance
       sigma_sq_tru <- diag(t(res$result$resp) %*% sweep(matrix(rep(c(data[,j]),8),ncol=8,byrow=FALSE), 2, mu_tru,"-")^2/colSums(res$result$resp))
       # error

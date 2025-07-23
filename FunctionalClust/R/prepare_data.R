@@ -14,10 +14,10 @@
 prepare_data <- function(df) {
   stopifnot(is.data.frame(df), ncol(df) >= 2)
 
-  ## 1) predictors → numeric matrix  (drop = FALSE keeps matrix form for n = 1)
+  ## predictors → numeric matrix  (drop = FALSE keeps matrix form for n = 1)
   X <- as.matrix(df[, -ncol(df), drop = FALSE])
 
-  ## 2) labels  → (index, integer-factor)
+  ## labels  → (index, integer-factor)
   y        <- df[[ncol(df)]]
   y[y == "unknown"] <- NA
   idx      <- which(!is.na(y))           # rows that *have* a label
@@ -27,7 +27,7 @@ prepare_data <- function(df) {
   labels <- data.frame(index = idx,
                        label = y_int)
 
-  ## (optional) keep the mapping so you can recover the original text
+  ## keep the mapping so you can recover the original text
   attr(labels$label, "levels") <- levels(y_factor)
 
   list(data = X,
