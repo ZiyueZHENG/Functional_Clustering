@@ -1,4 +1,4 @@
-# Functional_Clustering
+# fspmixing
 
 This package implements a semi-supervised functional clustering model for spatial proteomics data. Our approach is designed for leveraging the small labeled subset to guide learning while extracting structure from the abundant unlabeled data. This makes the method especially useful when full annotation is costly or impractical. 
 
@@ -28,16 +28,16 @@ With this dataframe, you can use *prepare_data* to process the data. And this fu
 data <- x$data
 label <- x$labels</pre>
 There are several built-in datasets in this package. You can check and refer to their data type:
-- yeast2018
-- hirst2018
-- moloneyTbBSF
-- lopitdcU2OS2018
-- E14TG2aR
-- Loay2024
+* yeast2018
+* hirst2018
+* moloneyTbBSF
+* lopitdcU2OS2018
+* E14TG2aR
+* Loay2024
 
 
 ### Step 1 Fit the model
-The main function in this package is *functional_cluster* which takes at most 7 parameters. **data** and **num_clust** are required, the others are optional. Here is the full list:
+The main function in this package is *fspmix* which takes at most 7 parameters. **data** and **num_clust** are required, the others are optional. Here is the full list:
 * data : A n*p numeric matrix. Row represents protein and column represents fraction. 
 * label : A n_c*2 data frame. First column represents the labeled data index, second column represents the label index(numeric factor).  
 * num_clust : Number of clusters.(Should be no less than number of label classes)
@@ -45,14 +45,14 @@ The main function in this package is *functional_cluster* which takes at most 7 
 * max_iter : Maximum iteration number. Default 1000
 * min_gap : Stopping gap of likelihood. Default 0.1
 * nrep : Number of repetitions with different initialization. Default 10
-<pre lang="markdown">res <- functional_cluster(data = data, label = label, 
+<pre lang="markdown">res <- fspmix(data = data, label = label, 
   num_clust = 10, bandwidth = 1.5, 
   max_iter = 1000, min_gap = 0.1, nrep = 10)
 </pre>
 In a later section we discussed how to use cross-validation to choose the best hyper-parameters **h** and **num_clust**. 
 
 ### Step 2 Interpret the results
-The main function *functional_cluster* will return a list with the following structure:
+The main function *fspmix* will return a list with the following structure:
 - result
   - result$mu : A K*d matrix. Each row represents a group mean. Each column represents a fraction.
   - result$sigma : A K*d matrix. The (k,j) element represents the standard deviation of k-th group at j-th fraction.
@@ -64,16 +64,16 @@ The main function *functional_cluster* will return a list with the following str
 
 ### Step 3 Visualization 
 *visualize_res* functions in this package allow you to check the clustering results in a 2-dimensional UMAP space.
-* data : The same input as *functional_cluster*
-* label : The same input as *functional_cluster*
-* res : The output result from *functional_cluster*
+* data : The same input as *fspmix*
+* label : The same input as *fspmix*
+* res : The output result from *fspmix*
 ## Prediction visualization
 <pre lang="markdown">visualize_res(data = train_data$data, label = train_data$labels , res = res)
 </pre>
 
 ## Drawing high probability bands
 *draw_hpb* draws the cluster-conditional high proability bands for all fitted clusters including labeled and unlabeled.
-* res : Result from *functional_cluster*
+* res : Result from *fspmix*
 * alpha : Alpha level of bans
 * label : label data. Can be NULL(default)
 <pre lang="markdown">draw_hpb(res, alpha = 0.05, label = train_data$labels)
@@ -81,7 +81,7 @@ The main function *functional_cluster* will return a list with the following str
 
 ### Optional: Choosing the best hyper-parameters
 Choosing the best smoothern bandwidth:
-The *cv_functional_clust* is a cross-validation procedure for choosing **h**.
+The *cv_fspmix* is a cross-validation procedure for choosing **h**.
 
 Choosing the best number of clusters:
 In the paper we use AIC to choose number of new clusters *K0*. User can choose to use other procedure.
