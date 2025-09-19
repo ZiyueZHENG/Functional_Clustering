@@ -1,4 +1,4 @@
-# fspmixing
+# FSPmix
 
 This package implements a semi-supervised functional clustering model for spatial proteomics data. Our approach is designed for leveraging the small labeled subset to guide learning while extracting structure from the abundant unlabeled data. This makes the method especially useful when full annotation is costly or impractical. 
 
